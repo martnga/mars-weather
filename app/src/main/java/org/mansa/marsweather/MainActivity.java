@@ -1,5 +1,7 @@
 package org.mansa.marsweather;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.support.v7.app.AppCompatActivity;
@@ -18,6 +20,7 @@ import com.android.volley.toolbox.ImageRequest;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.Calendar;
 import java.util.Random;
 
 public class MainActivity extends AppCompatActivity {
@@ -31,6 +34,12 @@ public class MainActivity extends AppCompatActivity {
             FLICKR_API_KEY = "[INSERT HERE YOUR API KEY]",
             IMAGES_API_ENDPOINT = "https://api.flickr.com/services/rest/?format=json&nojsoncallback=1&sort=random&method=flickr.photos.search&" +
                     "tags=mars,planet,rover&tag_mode=all&api_key=";
+    SharedPreferences mSharedPref;
+
+    int today = Calendar.getInstance().get(Calendar.DAY_OF_MONTH);
+
+    final static String SHARED_PREFS_IMG_KEY = "img",
+            SHARED_PREFS_DAY_KEY = "day";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,6 +50,29 @@ public class MainActivity extends AppCompatActivity {
         mTxtWeather = (TextView) findViewById(R.id.weather);
         mTxtError = (TextView) findViewById(R.id.error);
         mImageView = (ImageView) findViewById(R.id.main_bg);
+
+        if (mSharedPref.getInt(SHARED_PREFS_DAY_KEY, 0) != today) {
+            // search and load a random mars pict
+            try {
+                searchRandomImage();
+            } catch (Exception e) {
+                // please remember to set your own Flickr API!
+                // otherwise I won't be able to show
+                // a random Mars picture
+                imageError(e);
+            }
+        } else {
+            // we already have a pict of the day: let's load it
+            loadImg(mSharedPref.getString(SHARED_PREFS_IMG_KEY, ""));
+        }
+
+        loadWeatherData();
+        mSharedPref = getPreferences(Context.MODE_PRIVATE);
+        try {
+            searchRandomImage();
+        }catch (Exception e){
+            txtError(e);
+        }
     }
 
     @Override
@@ -131,7 +163,16 @@ public class MainActivity extends AppCompatActivity {
                                     ".static.flickr.com/" + imageItem.getString("server") + "/" +
                                     imageItem.getString("id") + "_" + imageItem.getString("secret") + "_" + "c.jpg";
 
+                            // store the pict of the day
+                            SharedPreferences.Editor editor = mSharedPref.edit();
+                            editor.putInt(SHARED_PREFS_DAY_KEY, today);
+                            editor.putString(SHARED_PREFS_IMG_KEY, imageUrl);
+                            editor.commit();
+
+                            // and then there's *loadImage(imageUrl);*
+
                             // TODO: do something with *imageUrl*
+                            loadImg(imageUrl);
 
                         } catch (Exception e) { imageError(e); }
                     }
