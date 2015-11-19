@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.Menu;
@@ -31,7 +32,7 @@ public class MainActivity extends AppCompatActivity {
     MarsWeather helper = MarsWeather.getInstance();
     final static String RECENT_API_ENDPOINT = "http://marsweather.ingenology.com/v1/latest/";
     final static String
-            FLICKR_API_KEY = "[INSERT HERE YOUR API KEY]",
+            FLICKR_API_KEY = "[5bd0ea94385dcd0caa8d1506e58b523c]",
             IMAGES_API_ENDPOINT = "https://api.flickr.com/services/rest/?format=json&nojsoncallback=1&sort=random&method=flickr.photos.search&" +
                     "tags=mars,planet,rover&tag_mode=all&api_key=";
     SharedPreferences mSharedPref;
@@ -50,6 +51,9 @@ public class MainActivity extends AppCompatActivity {
         mTxtWeather = (TextView) findViewById(R.id.weather);
         mTxtError = (TextView) findViewById(R.id.error);
         mImageView = (ImageView) findViewById(R.id.main_bg);
+
+        mTxtDegrees.setTypeface(Typeface.createFromAsset(getAssets(), "fonts/Lato-Thin.ttf"));
+        mTxtWeather.setTypeface(Typeface.createFromAsset(getAssets(), "fonts/Lato-Thin.ttf"));
 
         if (mSharedPref.getInt(SHARED_PREFS_DAY_KEY, 0) != today) {
             // search and load a random mars pict
