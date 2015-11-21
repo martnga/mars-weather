@@ -1,11 +1,11 @@
 package org.mansa.marsweather;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -24,7 +24,7 @@ import org.json.JSONObject;
 import java.util.Calendar;
 import java.util.Random;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends Activity {
 
     TextView mTxtDegrees, mTxtWeather, mTxtError;
     ImageView mImageView;
@@ -32,7 +32,7 @@ public class MainActivity extends AppCompatActivity {
     MarsWeather helper = MarsWeather.getInstance();
     final static String RECENT_API_ENDPOINT = "http://marsweather.ingenology.com/v1/latest/";
     final static String
-            FLICKR_API_KEY = "[5bd0ea94385dcd0caa8d1506e58b523c]",
+            FLICKR_API_KEY = "5bd0ea94385dcd0caa8d1506e58b523c",
             IMAGES_API_ENDPOINT = "https://api.flickr.com/services/rest/?format=json&nojsoncallback=1&sort=random&method=flickr.photos.search&" +
                     "tags=mars,planet,rover&tag_mode=all&api_key=";
     SharedPreferences mSharedPref;
@@ -54,9 +54,13 @@ public class MainActivity extends AppCompatActivity {
 
         mTxtDegrees.setTypeface(Typeface.createFromAsset(getAssets(), "fonts/Lato-Thin.ttf"));
         mTxtWeather.setTypeface(Typeface.createFromAsset(getAssets(), "fonts/Lato-Thin.ttf"));
+// SharedPreferences setup
+        mSharedPref = getPreferences(Context.MODE_PRIVATE);
 
+
+        // Picture
         if (mSharedPref.getInt(SHARED_PREFS_DAY_KEY, 0) != today) {
-            // search and load a random mars pict
+            // search and load a random mars pict.
             try {
                 searchRandomImage();
             } catch (Exception e) {
@@ -66,47 +70,109 @@ public class MainActivity extends AppCompatActivity {
                 imageError(e);
             }
         } else {
-            // we already have a pict of the day: let's load it
+            // we already have a pict of the day: let's load it!
             loadImg(mSharedPref.getString(SHARED_PREFS_IMG_KEY, ""));
         }
 
+        // Weather data
         loadWeatherData();
-        mSharedPref = getPreferences(Context.MODE_PRIVATE);
-        try {
-            searchRandomImage();
-        }catch (Exception e){
-            txtError(e);
-        }
+
     }
 
     @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.menu_main, menu);
-        return true;
+    protected void onStop() {
+        super.onStop();
+        // This will tell to Volley to cancel all the pending requests
+        helper.cancel();
     }
 
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
+    /**
+     * Fetches a random picture of Mars, using Flickr APIs, and then displays it.
+     * @throws Exception When a working API key is not provided.
+     */
+    private void searchRandomImage() throws Exception {
+        if (FLICKR_API_KEY.equals(""))
+            throw new Exception("You didn't provide a working Flickr API key!");
 
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            return true;
-        }
+        CustomJsonRequest request = new CustomJsonRequest
+                (Request.Method.GET, IMAGES_API_ENDPOINT+ FLICKR_API_KEY, null, new Response.Listener<JSONObject>() {
 
-        return super.onOptionsItemSelected(item);
+                    @Override
+                    public void onResponse(JSONObject response) {
+                        // if you want to debug: Log.v(getString(R.string.app_name), response.toString());
+
+                        try {
+                            JSONArray images = response.getJSONObject("photos").getJSONArray("photo");
+                            int index = new Random().nextInt(images.length());
+
+                            JSONObject imageItem = images.getJSONObject(index);
+
+                            String imageUrl = "http://farm" + imageItem.getString("farm") +
+                                    ".static.flickr.com/" + imageItem.getString("server") + "/" +
+                                    imageItem.getString("id") + "_" + imageItem.getString("secret") + "_" + "c.jpg";
+
+                            // store the pict of the day
+                            SharedPreferences.Editor editor = mSharedPref.edit();
+                            editor.putInt(SHARED_PREFS_DAY_KEY, today);
+                            editor.putString(SHARED_PREFS_IMG_KEY, imageUrl);
+                            editor.commit();
+
+                            // and finally load it
+                            loadImg(imageUrl);
+
+                        } catch (Exception e) {
+                            imageError(e);
+                        }
+
+                    }
+                }, new Response.ErrorListener() {
+                    @Override
+                    public void onErrorResponse(VolleyError error) {
+                        imageError(error);
+                    }
+                });
+
+        request.setPriority(Request.Priority.LOW);
+        helper.add(request);
+
     }
 
+    /**
+     * Downloads and displays the picture using Volley.
+     * @param imageUrl the URL of the picture.
+     */
+    private void loadImg(String imageUrl) {
+        // Retrieves an image specified by the URL, and displays it in the UI
+        ImageRequest request = new ImageRequest(imageUrl,
+                new Response.Listener<Bitmap>() {
+                    @Override
+                    public void onResponse(Bitmap bitmap) {
+                        mImageView.setImageBitmap(bitmap);
+                    }
+                }, 0, 0, ImageView.ScaleType.CENTER_CROP, Bitmap.Config.ARGB_8888,
+                new Response.ErrorListener() {
+                    public void onErrorResponse(VolleyError error) {
+                        imageError(error);
+                    }
+                });
+
+        // we don't need to set the priority here;
+        // ImageRequest already comes in with
+        // priority set to LOW, that is exactly what we need.
+        helper.add(request);
+    }
+
+    /**
+     * Fetches and displays the weather data of Mars.
+     */
     private void loadWeatherData() {
+
         CustomJsonRequest request = new CustomJsonRequest
                 (Request.Method.GET, RECENT_API_ENDPOINT, null, new Response.Listener<JSONObject>() {
 
                     @Override
                     public void onResponse(JSONObject response) {
+                        // if you want to debug: Log.v(getString(R.string.app_name), response.toString());
                         try {
 
                             String minTemp, maxTemp, atmo;
@@ -143,79 +209,14 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    private void txtError(Exception e) {
-        mTxtError.setVisibility(View.VISIBLE);
-        e.printStackTrace();
-    }
-
-    private void searchRandomImage() throws Exception {
-        if (FLICKR_API_KEY.equals(""))
-            throw new Exception("You didn't provide a working Flickr API!");
-
-        CustomJsonRequest request = new CustomJsonRequest
-                (Request.Method.GET, IMAGES_API_ENDPOINT+ FLICKR_API_KEY, null, new Response.Listener<JSONObject>() {
-
-                    @Override
-                    public void onResponse(JSONObject response) {
-                        try {
-                            JSONArray images = response.getJSONObject("photos").getJSONArray("photo");
-                            int index = new Random().nextInt(images.length());
-
-                            JSONObject imageItem = images.getJSONObject(index);
-
-                            String imageUrl = "http://farm" + imageItem.getString("farm") +
-                                    ".static.flickr.com/" + imageItem.getString("server") + "/" +
-                                    imageItem.getString("id") + "_" + imageItem.getString("secret") + "_" + "c.jpg";
-
-                            // store the pict of the day
-                            SharedPreferences.Editor editor = mSharedPref.edit();
-                            editor.putInt(SHARED_PREFS_DAY_KEY, today);
-                            editor.putString(SHARED_PREFS_IMG_KEY, imageUrl);
-                            editor.commit();
-
-                            // and then there's *loadImage(imageUrl);*
-
-                            // TODO: do something with *imageUrl*
-                            loadImg(imageUrl);
-
-                        } catch (Exception e) { imageError(e); }
-                    }
-                }, new Response.ErrorListener() {
-                    @Override
-                    public void onErrorResponse(VolleyError error) {
-                        imageError(error);
-                    }
-                });
-        request.setPriority(Request.Priority.LOW);
-        helper.add(request);
-    }
-
-
-
     private void imageError(Exception e) {
         mImageView.setBackgroundColor(mainColor);
         e.printStackTrace();
     }
 
-    private void loadImg(String imageUrl) {
-        // Retrieves an image specified by the URL, and displays it in the UI
-        ImageRequest request = new ImageRequest(imageUrl,
-                new Response.Listener<Bitmap>() {
-                    @Override
-                    public void onResponse(Bitmap bitmap) {
-                        mImageView.setImageBitmap(bitmap);
-                    }
-                }, 0, 0, ImageView.ScaleType.CENTER_CROP, Bitmap.Config.ARGB_8888,
-                new Response.ErrorListener() {
-                    public void onErrorResponse(VolleyError error) {
-                        imageError(error);
-                    }
-                });
-
-        // we don't need to set the priority here;
-        // ImageRequest already comes in with
-        // priority set to LOW, that is exactly what we need.
-        helper.add(request);
+    private void txtError(Exception e) {
+        mTxtError.setVisibility(View.VISIBLE);
+        e.printStackTrace();
     }
 
 }
